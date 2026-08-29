@@ -1,4 +1,5 @@
 import datetime as dt
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,10 @@ import src.services.storage as storage
 
 
 class StorageTests(unittest.TestCase):
+    def assert_private_mode(self, path):
+        if os.name != "nt":
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         root = Path(self.temp.name)
@@ -31,14 +36,14 @@ class StorageTests(unittest.TestCase):
     def test_config_no_guarda_token(self):
         storage.ConfigStore.save({"url": "https://campus.test", "usuario": "juan", "token": "secret"})
         self.assertNotIn("secret", storage.CONFIG_FILE.read_text())
-        self.assertEqual(storage.CONFIG_FILE.stat().st_mode & 0o777, 0o600)
+        self.assert_private_mode(storage.CONFIG_FILE)
 
     def test_token_fallback_privado(self):
         backend = storage.SecureTokenStore.set("https://campus.test", "juan", "secret")
         token, _ = storage.SecureTokenStore.get("https://campus.test", "juan")
         self.assertEqual(backend, "archivo privado (600)")
         self.assertEqual(token, "secret")
-        self.assertEqual(storage.TOKEN_FILE.stat().st_mode & 0o777, 0o600)
+        self.assert_private_mode(storage.TOKEN_FILE)
 
     def test_cache_recupera_fechas(self):
         expected = dt.datetime(2026, 8, 29, 12, 0)
@@ -50,7 +55,7 @@ class StorageTests(unittest.TestCase):
     def test_diagnostico_es_privado(self):
         storage.DiagnosticStore.append([{"etapa": "Calendario", "mensaje": "No disponible"}])
         self.assertIn("Calendario", storage.LOG_FILE.read_text())
-        self.assertEqual(storage.LOG_FILE.stat().st_mode & 0o777, 0o600)
+        self.assert_private_mode(storage.LOG_FILE)
 
 
 if __name__ == "__main__":
