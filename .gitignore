@@ -6,3 +6,11 @@ __pycache__/
 venv/
 .venv/
 env/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.spec.bak
+.DS_Store

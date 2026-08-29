@@ -15,13 +15,14 @@ class MoodleClient:
         })
 
     def login(self, usuario, clave):
-            """Obtiene token con usuario/contrasena (servicio de la app movil)."""
-            r = self.s.get(
+            """Obtiene token sin exponer credenciales en la URL o en historiales."""
+            r = self.s.post(
                 f"{self.base}/login/token.php",
-                params={"username": usuario, "password": clave,
-                        "service": "moodle_mobile_app"},
+                data={"username": usuario, "password": clave,
+                      "service": "moodle_mobile_app"},
                 timeout=30,
             )
+            r.raise_for_status()
             try:
                 data = r.json()
             except ValueError:
@@ -56,6 +57,7 @@ class MoodleClient:
             payload.update(params)
             r = self.s.post(f"{self.base}/webservice/rest/server.php",
                             data=payload, timeout=45)
+            r.raise_for_status()
             try:
                 data = r.json()
             except ValueError:
@@ -78,14 +80,29 @@ class MoodleClient:
             params[f"courseids[{i}]"] = cid
         return self.ws("mod_assign_get_assignments", **params)
 
-    def eventos_calendario(self, dias_adelante=60):
+    def eventos_calendario(self, dias_adelante=120, tamano_pagina=50):
+        """Descarga todos los eventos accionables mediante paginación."""
+        tamano_pagina = max(1, min(int(tamano_pagina), 50))
         ahora = int(dt.datetime.now().timestamp())
-        return self.ws(
-            "core_calendar_get_action_events_by_timesort",
-            timesortfrom=ahora - 86400,
-            timesortto=ahora + dias_adelante * 86400,
-            limitnum=50,
-        )
+        encontrados = []
+        aftereventid = 0
+        for _ in range(50):
+            pagina = self.ws(
+                "core_calendar_get_action_events_by_timesort",
+                timesortfrom=ahora - 86400 * 30,
+                timesortto=ahora + dias_adelante * 86400,
+                aftereventid=aftereventid,
+                limitnum=tamano_pagina,
+            )
+            eventos = pagina.get("events", [])
+            encontrados.extend(eventos)
+            if len(eventos) < tamano_pagina:
+                break
+            nuevo_cursor = eventos[-1].get("id")
+            if not nuevo_cursor or nuevo_cursor == aftereventid:
+                break
+            aftereventid = nuevo_cursor
+        return {"events": encontrados}
 
     def eventos_calendario_completos(self, ids, dias_adelante=120):
         """Incluye eventos sin acción, donde suelen publicarse las clases."""
@@ -115,3 +132,17 @@ class MoodleClient:
 
     def contenido_curso(self, courseid):
         return self.ws("core_course_get_contents", courseid=courseid)
+
+    def calificaciones_curso(self, courseid, userid):
+        return self.ws(
+            "gradereport_user_get_grade_items",
+            courseid=courseid,
+            userid=userid,
+        )
+
+    def progreso_curso(self, courseid, userid):
+        return self.ws(
+            "core_completion_get_course_completion_status",
+            courseid=courseid,
+            userid=userid,
+        )

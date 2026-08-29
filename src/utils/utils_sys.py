@@ -1,12 +1,8 @@
 import re
 import html
-import os
-import json
-
 from urllib.parse import unquote, urlparse
 
-
-CONFIG_FILE = os.path.join(os.path.expanduser("~"), ".horario_moodle.json")
+from src.services.storage import ConfigStore
 
 DOMINIOS_TEAMS = {
     "teams.microsoft.com", "team.live.com", "msteams.link"
@@ -98,16 +94,15 @@ class UtilsSys():
 
 
     def cargar_config():
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {}
+        return ConfigStore.load()
 
 
     def guardar_config(cfg):
-        try:
-            with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-                json.dump(cfg, f)
-        except Exception:
-            pass
+        ConfigStore.save(cfg)
+
+    @staticmethod
+    def url_es_segura(url):
+        """Solo permite HTTPS, salvo servidores de desarrollo locales."""
+        partes = urlparse(url)
+        host = (partes.hostname or "").lower()
+        return partes.scheme == "https" or host in {"localhost", "127.0.0.1", "::1"}
